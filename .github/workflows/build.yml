@@ -1,0 +1,86 @@
+name: Build EXE
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Create placeholder app.ico
+        shell: python
+        run: |
+          # Generate a minimal valid ICO file if app.ico is missing
+          import os, struct
+          if not os.path.exists('app.ico'):
+              # 1x1 transparent ICO
+              ico = (
+                  b'\x00\x00'          # Reserved
+                  b'\x01\x00'          # Type: ICO
+                  b'\x01\x00'          # Image count: 1
+                  b'\x01'              # Width: 1
+                  b'\x01'              # Height: 1
+                  b'\x00'              # Color count
+                  b'\x00'              # Reserved
+                  b'\x01\x00'          # Planes
+                  b'\x08\x00'          # Bit count
+                  b'\x28\x00\x00\x00'  # Size of image data
+                  b'\x16\x00\x00\x00'  # Offset to image data
+                  # BITMAPINFOHEADER (40 bytes)
+                  b'\x28\x00\x00\x00'  # Header size
+                  b'\x01\x00\x00\x00'  # Width
+                  b'\x02\x00\x00\x00'  # Height (doubled for ICO)
+                  b'\x01\x00'          # Planes
+                  b'\x08\x00'          # Bit count
+                  b'\x00\x00\x00\x00'  # Compression
+                  b'\x00\x00\x00\x00'  # Image size
+                  b'\x00\x00\x00\x00'  # X pixels per meter
+                  b'\x00\x00\x00\x00'  # Y pixels per meter
+                  b'\x00\x00\x00\x00'  # Colors used
+                  b'\x00\x00\x00\x00'  # Colors important
+                  # Color table (1 entry: transparent black)
+                  b'\x00\x00\x00\x00'
+                  # Pixel data (1 byte)
+                  b'\x00'
+                  # AND mask (1 byte)
+                  b'\xFF'
+              )
+              with open('app.ico', 'wb') as f:
+                  f.write(ico)
+              print('Created placeholder app.ico')
+          else:
+              print('app.ico already exists')
+
+      - name: Run build script
+        shell: cmd
+        run: python build.py
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome_manager-${{ github.ref_name }}
+          path: dist/chrome_manager.exe
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/chrome_manager.exe
+          generate_release_notes: true
